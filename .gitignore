@@ -7,7 +7,8 @@ __pycache__/
 *.so
 
 
-
+*lit_review/
+*lit_review
 
 lit_review/*
 
