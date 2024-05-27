@@ -3,6 +3,8 @@
 
 ## Overview
 
+This repoository accomapnies the forthcoming paper **A Paint Library Of Plastic Particles (PLOPP): Fourier transform infrared spectral analysis of paint microplastics**, Zoie T. Diana, Madeleine Milne, Jacob Ford, Ron Rubinovitz, Andrew Turner,  Chelsea M. Rochman. 
+
 This project aims to address the challenge of characterizing paint microplastics in the environment and differentiating them from non-paint microplastics. We have created a comprehensive Fourier transform infrared spectroscopy (FTIR) library named the Paint Library of Plastic Products (PLOPP), which includes 263 spectra from 90 different paints used in various sectors.
 
 To enhance the identification of paint microplastics, we utilized machine learning (ML) techniques to classify spectral data as either paint or non-paint microplastics. This document provides an overview of the ML component implemented in this project.
