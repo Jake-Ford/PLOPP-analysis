@@ -1,8 +1,9 @@
-pandas
-xgboost
-numpy
-sklearn
-matplotlib
-seaborn
-shap
+matplotlib==3.7.2
+numpy==1.23.2
+pandas==2.2.3
+scikit_learn==1.6.1
+scipy==1.13.1o
+seaborn==0.13.2
+shap==0.41.0
+xgboost==1.7.6
 openpyxl
