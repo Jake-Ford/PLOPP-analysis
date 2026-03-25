@@ -1,4 +1,4 @@
-# PLOPP/FLOPP Spectral Classification — src_v2
+# PLOPP/FLOPP Spectral Classification — script
 
 Refactored, production-quality Python implementation of the PLOPP/FLOPP
 FTIR spectral classification pipeline.  The original exploratory notebook
@@ -15,7 +15,7 @@ analysis/
 ├── models/                  ← saved pipeline artifacts
 │   └── rf_pipeline.pkl
 ├── src/                     ← original notebook (reference)
-└── src_v2/                  ← this package
+└── script/                  ← this package
     ├── config.py            ← all paths, constants, hyperparameters
     ├── data_prep.py         ← data loading, cleaning, transformers, splitting
     ├── model_run.py         ← pipeline construction, training, prediction, I/O
@@ -32,7 +32,7 @@ The project virtual environment lives one level above this folder.
 Activate it before running anything:
 
 ```bash
-# From analysis/src_v2/
+# From analysis/script/
 source ../../venv/bin/activate
 ```
 
@@ -43,7 +43,7 @@ cd /path/to/PLOPP-analysis
 python -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r analysis/src_v2/requirements.txt
+pip install -r analysis/script/requirements.txt
 ```
 
 ---
@@ -52,7 +52,7 @@ pip install -r analysis/src_v2/requirements.txt
 
 ```bash
 # Activate environment first (see above), then:
-cd analysis/src_v2
+cd analysis/script
 python main.py
 ```
 

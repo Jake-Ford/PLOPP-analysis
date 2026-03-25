@@ -13,7 +13,7 @@ Execution order
 
 Run
 ---
-    # From analysis/src_v2/:
+    # From analysis/script/:
     python main.py
 
     # Or with explicit log level:

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Root paths (all relative to this file's location inside analysis/src_v2/)
+# Root paths (all relative to this file's location inside analysis/script/)
 # ---------------------------------------------------------------------------
 SRC_DIR   = Path(__file__).resolve().parent
 ANALYSIS_DIR = SRC_DIR.parent                          # analysis/
@@ -140,7 +140,7 @@ FIGURE_FORMAT = "png"
 # Helper
 # ---------------------------------------------------------------------------
 def resolve_data_path(relative_path: Path) -> Path:
-    """Resolve a data path relative to src_v2/ and return an absolute Path."""
+    """Resolve a data path relative to script/ and return an absolute Path."""
     return (SRC_DIR / relative_path).resolve()
 
 
