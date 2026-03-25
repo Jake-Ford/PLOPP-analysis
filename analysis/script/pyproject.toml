@@ -2,7 +2,7 @@
 name = "plopp-analysis"
 version = "0.1.0"
 description = "PLOPP/FLOPP spectral classification pipeline"
-requires-python = ">=3.11"
+requires-python = "==3.13.7"
 dependencies = [
     "matplotlib==3.10.3",
     "numpy==2.3.1",

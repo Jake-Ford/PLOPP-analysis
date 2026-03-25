@@ -1,3 +1,8 @@
+# Notebook dependency list (unversioned).
+# For reproducible notebook setup, prefer:
+#   analysis/src/requirements-pinned.txt
+# with setup scripts in analysis/src.
+
 ipykernel
 matplotlib
 numba

@@ -1,6 +1,16 @@
+# Pinned notebook requirements for reproducible Jupyter execution.
+# Canonical notebook environment files:
+#   analysis/src/requirements-pinned.txt
+#   analysis/src/setup_notebook.ps1
+#   analysis/src/setup_notebook.sh
+#
 # Full pinned requirements for exact environment reproduction
-# Generated from: pip freeze (Python 3.13.7, venv)
-# To set up: python -m venv venv && venv\Scripts\activate && pip install -r requirements-pinned.txt
+# Python version: 3.13.7 (see .python-version)
+# To set up:
+#   python3.13 -m venv venv
+#   venv\Scripts\activate          (Windows)
+#   source venv/bin/activate       (Mac/Linux)
+#   pip install -r requirements-pinned.txt
 
 asttokens==3.0.1
 cloudpickle==3.1.2

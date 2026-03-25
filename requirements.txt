@@ -1,9 +1,13 @@
-matplotlib==3.7.2
-numpy==1.23.2
-pandas==2.2.3
-scikit_learn==1.6.1
-scipy==1.13.1o
+# Legacy pip fallback only.
+# Canonical reproducible environment: analysis/script/pyproject.toml + analysis/script/uv.lock
+# Preferred setup: `cd analysis/script && uv sync`
+
+matplotlib==3.10.3
+numpy==2.3.1
+pandas==2.3.0
+scikit-learn==1.7.0
+scipy==1.15.3
 seaborn==0.13.2
-shap==0.41.0
+shap==0.42.1
 xgboost==1.7.6
-openpyxl
+openpyxl==3.1.5

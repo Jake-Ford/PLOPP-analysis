@@ -28,7 +28,10 @@ analysis/
 
 ## Environment
 
-This project is managed with `uv` and expects Python `>=3.11`.
+This project is managed with `uv` using the committed `uv.lock` for reproducible
+installs across Windows and macOS.
+
+Use Python `3.13.7` (recommended to match lockfile resolution exactly).
 
 From `analysis/script`:
 

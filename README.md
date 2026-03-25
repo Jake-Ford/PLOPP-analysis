@@ -36,3 +36,40 @@ Training Data: The PLOPP library consisting of 263 spectra from 90 paints.Test D
 ## Results
 
 The trained model successfully classifies the spectra, enabling the differentiation between paint and non-paint microplastics in environmental samples. This classification supports the utility of the PLOPP library in environmental microplastic research.
+
+## Reproducible Setup (Windows and macOS)
+
+For repeatable environments across PCs and Macs, use the script pipeline in
+`analysis/script` with `uv` and the committed lockfile:
+
+1. Install `uv`.
+2. Ensure Python `3.13.7` is available.
+3. From `analysis/script`, run:
+
+```bash
+uv sync
+uv run python main.py
+```
+
+`analysis/script/pyproject.toml` + `analysis/script/uv.lock` are the canonical
+environment definition for reproducible runs.
+
+## Notebook Setup (analysis/src)
+
+If your priority is running `analysis/src/spectra_analysis.ipynb`, use the
+notebook setup scripts:
+
+- Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File analysis/src/setup_notebook.ps1
+```
+
+- macOS/Linux:
+
+```bash
+bash analysis/src/setup_notebook.sh
+```
+
+Then open `analysis/src/spectra_analysis.ipynb` in VS Code and choose kernel:
+`PLOPP Notebook (.venv)`. 
