@@ -1,4 +1,6 @@
+ipykernel
 matplotlib
+numba
 numpy
 openpyxl
 pandas
