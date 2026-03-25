@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repoository accomapnies the forthcoming paper **A Paint Library Of Plastic Particles (PLOPP): Fourier transform infrared spectral analysis of paint microplastics**, Zoie T. Diana, Madeleine Milne, Jacob Ford, Ron Rubinovitz, Andrew Turner, Chelsea M. Rochman.
+This repository accompanies the forthcoming paper **A Paint Library Of Plastic Particles (PLOPP): Fourier transform infrared spectral analysis of paint microplastics**, Zoie T. Diana, Madeleine Milne, Jacob Ford, Ron Rubinovitz, Andrew Turner, Chelsea M. Rochman.
 
 This project aims to address the challenge of characterizing paint microplastics in the environment and differentiating them from non-paint microplastics. We have created a comprehensive Fourier transform infrared spectroscopy (FTIR) library named the Paint Library of Plastic Products (PLOPP), which includes 263 spectra from 90 different paints used in various sectors.
 
@@ -56,20 +56,34 @@ environment definition for reproducible runs.
 
 ## Notebook Setup (analysis/src)
 
-If your priority is running `analysis/src/spectra_analysis.ipynb`, use the
-notebook setup scripts:
+To run `analysis/src/spectra_analysis.ipynb`, follow these steps:
 
-- Windows (PowerShell):
+### Prerequisites (one-time)
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/):
+   - **Windows (PowerShell):** `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+   - **macOS/Linux:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2. Install VS Code and the **Jupyter** extension (`ms-toolsai.jupyter`).
+
+### Environment Setup (run once per machine)
+
+- **Windows (PowerShell):**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File analysis/src/setup_notebook.ps1
 ```
 
-- macOS/Linux:
+- **macOS/Linux:**
 
 ```bash
 bash analysis/src/setup_notebook.sh
 ```
 
-Then open `analysis/src/spectra_analysis.ipynb` in VS Code and choose kernel:
-`PLOPP Notebook (.venv)`. 
+The script will install Python 3.13.7 (via uv), create a virtual environment at `analysis/src/.venv`, install all pinned dependencies, and register the Jupyter kernel.
+
+### Running the Notebook
+
+1. Open VS Code in the repo root.
+2. Open `analysis/src/spectra_analysis.ipynb`.
+3. Click **Select Kernel** (top-right) → **Jupyter Kernel...** → **PLOPP Notebook (.venv)**.
+4. Click **Run All** or use `Shift+Enter` to run cells individually.
