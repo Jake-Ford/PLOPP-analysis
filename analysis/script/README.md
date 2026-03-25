@@ -1,112 +1,96 @@
-# PLOPP/FLOPP Spectral Classification — script
+# PLOPP/FLOPP Spectral Classification
 
-Refactored, production-quality Python implementation of the PLOPP/FLOPP
-FTIR spectral classification pipeline.  The original exploratory notebook
-(`../src/spectra_analysis.ipynb`) has been reorganised into four focused
-modules with clean interfaces and no notebook clutter.
+This folder contains the script-based version of the FTIR paint / non-paint
+analysis that was originally developed in
+`analysis/src/spectra_analysis.ipynb`.
 
----
+The goal of this code is to make the notebook workflow reproducible and easier
+to run as a normal Python pipeline while preserving the notebook's modeling and
+validation logic as closely as practical.
 
-## Repository layout
+## Layout
 
-```
+```text
 analysis/
-├── figures/                 ← generated figures (created on first run)
-├── models/                  ← saved pipeline artifacts
-│   └── rf_pipeline.pkl
-├── src/                     ← original notebook (reference)
-└── script/                  ← this package
-    ├── config.py            ← all paths, constants, hyperparameters
-    ├── data_prep.py         ← data loading, cleaning, transformers, splitting
-    ├── model_run.py         ← pipeline construction, training, prediction, I/O
-    ├── evaluation.py        ← metrics computation and figure generation
-    ├── main.py              ← end-to-end orchestration entry point
-    └── requirements.txt     ← pinned Python dependencies
+├── data/                input datasets used by the script
+├── figures/             generated figures
+├── models/              saved model artifacts
+├── src/                 original notebook reference
+└── script/              this script-based pipeline
+    ├── config.py
+    ├── data_prep.py
+    ├── evaluation.py
+    ├── main.py
+    ├── model_run.py
+    ├── pyproject.toml
+    └── uv.lock
 ```
 
----
+## Environment
 
-## Environment setup
+This project is managed with `uv` and expects Python `>=3.11`.
 
-The project virtual environment lives one level above this folder.
-Activate it before running anything:
+From `analysis/script`:
 
 ```bash
-# From analysis/script/
-source ../../venv/bin/activate
+uv sync
 ```
 
-To create the environment from scratch:
+If you already have a virtual environment active from somewhere else, `uv` may
+warn that it is ignoring it. That is expected unless you intentionally use
+`uv run --active ...`.
+
+## Running
+
+From `analysis/script`:
 
 ```bash
-cd /path/to/PLOPP-analysis
-python -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r analysis/script/requirements.txt
+uv run python main.py
 ```
 
----
-
-## Running the pipeline
+Common options:
 
 ```bash
-# Activate environment first (see above), then:
-cd analysis/script
-python main.py
+uv run python main.py --skip-tuning
+uv run python main.py --log-level DEBUG
+uv run python main.py --log-level WARNING
 ```
 
-Optional flags:
+## What The Pipeline Does
 
-```bash
-python main.py --log-level DEBUG   # verbose output
-python main.py --log-level WARNING # quiet output
-```
+1. Loads the PLOPP and FLOPP spectra.
+2. Builds the train / test split.
+3. Fits the SNV -> derivative -> PCA -> RandomForest pipeline.
+4. Evaluates the held-out test set.
+5. Evaluates the external validation data.
+6. Trains and evaluates the sector models.
+7. Writes figures, logs, and model artifacts under `analysis/`.
 
-The pipeline will:
-1. Load PLOPP and FLOPP spectral CSVs, split into train/test sets
-2. Fit the SNV → Derivative → PCA → RandomForest pipeline
-3. Evaluate on the held-out test set and write figures to `../figures/`
-4. Evaluate on Andrew Turner + Citadel validation sets
-5. Save the fitted pipeline to `../models/rf_pipeline.pkl`
+## Main Modules
 
----
-
-## Module overview
-
-| Module | Responsibility |
+| File | Purpose |
 |---|---|
-| `config.py` | Single source of truth for all paths and hyperparameters |
-| `data_prep.py` | CSV loading, label assignment, group-aware splitting, SNVTransformer, DerivativeTransformer, validation loaders |
-| `model_run.py` | `build_pipeline()`, `train_pipeline()`, `predict()` (with threshold), `save_pipeline()`, `load_pipeline()` |
-| `evaluation.py` | `compute_metrics()`, confusion matrix, ROC curve, feature importance plots, probability distribution plot, `evaluate_validation_set()` |
-| `main.py` | Glues everything together; run this file to execute the full pipeline |
+| `config.py` | Paths, constants, and model settings |
+| `data_prep.py` | Data loading, preprocessing, and notebook-parity validation assembly |
+| `model_run.py` | Training, prediction, sector-model training, and persistence helpers |
+| `evaluation.py` | Metrics, reports, and figure generation |
+| `main.py` | End-to-end entry point |
 
----
+## Outputs
 
-## Pipeline architecture
+Typical outputs are written under `analysis/`:
 
-```
-Raw CSVs
-  └─► _process_csv_directory()   (data_prep)
-        └─► SNVTransformer         (mean-centre + scale row-wise)
-              └─► DerivativeTransformer  (1st derivative, Savitzky-Golay)
-                    └─► PCA              (retain 95 % variance)
-                          └─► RandomForestClassifier
-                                └─► threshold = 0.60 → PLoPP / FLoPP
-```
+- `figures/`
+- `models/`
+- `pipeline.log`
+- `validation_results.csv`
 
----
+Exact figure filenames depend on which stages are run.
 
-## Output files
+## Notes
 
-| File | Description |
-|---|---|
-| `../figures/confusion_matrix.png` | Annotated confusion matrix with TPR/FPR/TNR/FNR |
-| `../figures/roc_curve.png` | ROC curve with AUC |
-| `../figures/feature_importance_top15.png` | Top 15 wavenumber importances |
-| `../figures/feature_importance_spectrum.png` | Full-spectrum importance line plot |
-| `../figures/predicted_probabilities.png` | Scatter + box plot of P(PLoPP) |
-| `../models/rf_pipeline.pkl` | Serialised fitted pipeline |
-| `../validation_results.csv` | Per-sample validation predictions |
-| `../pipeline.log` | Full run log |
+- The original notebook is still the reference for exploratory work.
+- The script currently tracks the corrected sector-validation behavior rather
+  than the stale figures embedded in older notebook outputs.
+- If notebook and script results differ, restart the notebook kernel and rerun
+  the relevant cells in order before comparing outputs.
