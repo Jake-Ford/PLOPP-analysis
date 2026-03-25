@@ -135,7 +135,8 @@ def print_metrics_report(
     print(f"  Precision  : {metrics['precision']:.4f}")
     print(f"  Recall     : {metrics['recall']:.4f}")
     print(f"  F1 Score   : {metrics['f1']:.4f}")
-    print(f"  ROC AUC    : {metrics['roc_auc']:.4f}")
+    if "roc_auc" in metrics:
+        print(f"  ROC AUC    : {metrics['roc_auc']:.4f}")
     print(divider)
     print(f"  True Positives  : {metrics['tp']}")
     print(f"  True Negatives  : {metrics['tn']}")
@@ -391,10 +392,12 @@ def plot_predicted_probabilities(
         data=plot_df,
         y="Predicted Probability",
         x="Actual Class",
+        hue="Actual Class",
         order=class_order,
         palette=box_palette,
         whis=1.5,
         fliersize=0,
+        legend=False,
         ax=ax,
     )
 
@@ -433,38 +436,72 @@ def evaluate_validation_set(
     X_val: pd.DataFrame,
     y_val: pd.Series,
     meta: pd.DataFrame,
-    threshold: float = config.CLASSIFICATION_THRESHOLD,
     output_csv: Path | str | None = None,
 ) -> tuple[dict, pd.DataFrame]:
     """
     Run the fitted pipeline on external validation data, compute metrics,
     and (optionally) write per-sample results to a CSV.
 
+    Matches notebook validation cell exactly:
+    - Uses pipeline.predict() (default 0.50 threshold, same as notebook)
+    - Maps labels to 0/1 (PLoPP=1, FLoPP=0) before metrics
+    - Uses average='weighted' for precision, recall, F1
+    - Fills any NaN predictions/labels with -1 (matches notebook fillna(-1))
+
     Parameters
     ----------
-    pipeline    : fitted Pipeline
-    X_val       : feature matrix
-    y_val       : true labels
-    meta        : DataFrame with Sample, zoie_sector, observed columns
-    threshold   : classification threshold for PLoPP
-    output_csv  : optional path to save the per-sample results CSV
+    pipeline   : fitted Pipeline
+    X_val      : feature matrix (already aligned to training columns)
+    y_val      : true labels (string: 'PLoPP' / 'FLoPP')
+    meta       : DataFrame with Sample, zoie_sector, observed columns
+    output_csv : optional path to save the per-sample results CSV
 
     Returns
     -------
-    metrics : dict  (same structure as compute_metrics())
+    metrics : dict with accuracy, precision, recall, f1, tpr, fpr, tnr, fnr,
+              tp, tn, fp, fn
     results : pd.DataFrame with columns Sample, zoie_sector, observed,
               predicted, P_PLoPP, correct
     """
-    from model_run import predict  # local import to avoid circular dependency
+    label_mapping = {config.LABEL_PLOPP: 1, config.LABEL_FLOPP: 0}
 
-    y_pred, y_proba = predict(pipeline, X_val, threshold=threshold)
-    classes = pipeline.classes_
-    pos_idx = list(classes).index(config.LABEL_PLOPP)
+    # Notebook uses pipeline.predict() — default 0.50 threshold
+    y_pred_str = pipeline.predict(X_val)
+    y_proba    = pipeline.predict_proba(X_val)
+    classes    = list(pipeline.classes_)
+    pos_idx    = classes.index(config.LABEL_PLOPP)
 
-    metrics = compute_metrics(y_val, y_pred, y_proba, pos_label=config.LABEL_PLOPP)
+    # Map to 0/1 and fill NaN (-1) to match notebook
+    y_true_num = pd.Series(y_val.values).map(label_mapping).fillna(-1).astype(int)
+    y_pred_num = pd.Series(y_pred_str).map(label_mapping).fillna(-1).astype(int)
+
+    accuracy  = accuracy_score(y_true_num, y_pred_num)
+    precision = precision_score(y_true_num, y_pred_num, average="weighted", zero_division=0)
+    recall    = recall_score(y_true_num, y_pred_num, average="weighted", zero_division=0)
+    f1        = f1_score(y_true_num, y_pred_num, average="weighted", zero_division=0)
+
+    cm = confusion_matrix(y_true_num, y_pred_num)
+    if cm.shape == (2, 2):
+        tn, fp, fn, tp = cm.ravel()
+        total = tp + tn + fp + fn
+        tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        tnr = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+        fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+    else:
+        tp = tn = fp = fn = tpr = fpr = tnr = fnr = 0
+
+    metrics = {
+        "accuracy":  accuracy,
+        "precision": precision,
+        "recall":    recall,
+        "f1":        f1,
+        "tp": int(tp), "tn": int(tn), "fp": int(fp), "fn": int(fn),
+        "tpr": tpr, "fpr": fpr, "tnr": tnr, "fnr": fnr,
+    }
 
     results = meta.copy().reset_index(drop=True)
-    results["predicted"] = y_pred
+    results["predicted"] = y_pred_str
     results["P_PLoPP"]   = y_proba[:, pos_idx].round(4)
     results["correct"]   = results["predicted"] == results["observed"]
 
@@ -472,7 +509,7 @@ def evaluate_validation_set(
         output_csv = Path(output_csv)
         output_csv.parent.mkdir(parents=True, exist_ok=True)
         results.to_csv(output_csv, index=False)
-        logger.info("Validation results saved → %s", output_csv)
+        logger.info("Validation results saved -> %s", output_csv)
 
     return metrics, results
 
@@ -715,6 +752,114 @@ def plot_sector_confusion_matrices(
     logger.info("Sector confusion matrices saved to %s", output_dir)
 
 
+def plot_validation_sector_confusion_matrices(
+    sector_results: dict,
+    output_dir: Path | str | None = None,
+    label_prefix: str = "",
+) -> None:
+    """
+    Simple per-sector confusion matrix for external validation results.
+
+    Matches notebook Cell 57: figsize=(8,6), annot=True (counts shown by
+    seaborn directly), no custom rate-overlay text, plain xlabel/ylabel
+    without bold formatting.
+
+    Parameters
+    ----------
+    sector_results : dict returned by model_run.evaluate_sector_models_on_validation()
+                     Keys are sector names; values have 'y_test' and 'y_pred'.
+    output_dir     : directory to save figures; skipped if None
+    label_prefix   : prepended to each filename
+    """
+    for sector, data in sector_results.items():
+        y_true = np.array(data["y_test"])
+        y_pred = np.array(data["y_pred"])
+
+        labels = [0, 1]
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        if cm.shape != (2, 2):
+            continue
+
+        display_sector = sector.replace("General Industrial", "General\nIndustrial")
+        tick_labels = [f"Not {sector}", sector]
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        sns.heatmap(
+            cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+            xticklabels=tick_labels, yticklabels=tick_labels, ax=ax,
+        )
+        ax.set_xlabel("Predicted Label")
+        ax.set_ylabel("True Label")
+        plt.title(f"Confusion Matrix for {display_sector} Sector")
+        plt.tight_layout()
+
+        if output_dir is not None:
+            safe = sector.replace(" ", "_").replace("/", "-")
+            _save_figure(fig, Path(output_dir) / f"{label_prefix}confusion_{safe}.png")
+
+        plt.close(fig)
+
+    logger.info("Validation sector confusion matrices saved to %s", output_dir)
+
+
+def plot_sector_accuracy_bar(
+    sector_results: dict,
+    title: str = "Total Accuracy Across Sectors",
+    output_path: Path | str | None = None,
+) -> None:
+    """
+    Bar chart of per-sector accuracy.
+
+    Matches notebook Cells 46 and 58: figsize=(10,6), skyblue bars, accuracy
+    percentage labels above each bar, rotation=45, ylim=(0,1).
+
+    Parameters
+    ----------
+    sector_results : dict with sector names as keys; values must have
+                     'y_test' and 'y_pred' arrays.
+    title          : plot title
+    output_path    : file path to save; skipped if None
+    """
+    sectors = []
+    accuracies = []
+
+    for sector, data in sector_results.items():
+        y_true = np.array(data["y_test"])
+        y_pred = np.array(data["y_pred"])
+        acc = (y_true == y_pred).mean()
+        sectors.append(sector)
+        accuracies.append(acc)
+
+    bar_labels = [s.replace("General Industrial", "General\nIndustrial") for s in sectors]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(bar_labels, accuracies, color="skyblue")
+    ax.set_xlabel("Sector")
+    ax.set_ylabel("Accuracy")
+    ax.set_title(title)
+    ax.set_xticklabels(bar_labels, rotation=45)
+    ax.set_ylim(0, 1)
+
+    for bar, acc in zip(bars, accuracies):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{acc * 100:.1f}%",
+            ha="center", va="bottom",
+        )
+
+    overall = np.mean(accuracies)
+    logger.info("Overall mean accuracy across sectors: %.4f", overall)
+    print(f"\nTotal Accuracy across all sectors: {overall:.4f}")
+
+    plt.tight_layout()
+
+    if output_path is not None:
+        _save_figure(fig, Path(output_path))
+
+    plt.close(fig)
+
+
 def _save_figure(fig: plt.Figure, output_path: Path | str | None) -> None:
     """Save *fig* to *output_path* if a path is provided."""
     if output_path is not None:
@@ -726,4 +871,4 @@ def _save_figure(fig: plt.Figure, output_path: Path | str | None) -> None:
             format=config.FIGURE_FORMAT,
             bbox_inches="tight",
         )
-        logger.info("Figure saved → %s", output_path)
+        logger.info("Figure saved -> %s", output_path)

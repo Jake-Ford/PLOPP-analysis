@@ -2,15 +2,15 @@
 name = "plopp-analysis"
 version = "0.1.0"
 description = "PLOPP/FLOPP spectral classification pipeline"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "matplotlib>=3.7",
-    "numpy>=1.24",
-    "openpyxl>=3.1",
-    "pandas>=2.0",
-    "scikit-learn>=1.3",
-    "scipy>=1.11",
-    "seaborn>=0.13",
+    "matplotlib==3.10.3",
+    "numpy==2.3.1",
+    "openpyxl==3.1.5",
+    "pandas==2.3.0",
+    "scikit-learn==1.7.0",
+    "scipy==1.15.3",
+    "seaborn==0.13.2",
     "shap>=0.42",
     "xgboost>=1.7",
 ]

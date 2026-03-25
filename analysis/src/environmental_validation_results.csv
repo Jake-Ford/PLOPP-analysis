@@ -1,0 +1,86 @@
+Sample,observed,zoie_sector,prediction_group
+MP_ID_1,PLoPP,Road Marking,0
+MP_ID_10,FLoPP,,0
+MP_ID_11,PLoPP,Road Marking,1
+MP_ID_12,FLoPP,Marine,1
+MP_ID_13,PLoPP,General Industrial,1
+MP_ID_14,PLoPP,Architectural,1
+MP_ID_15,PLoPP,Marine,1
+MP_ID_16,PLoPP,Wood,1
+MP_ID_17,PLoPP,Architectural,0
+MP_ID_18,PLoPP,Architectural,1
+MP_ID_19,PLoPP,General Industrial,1
+MP_ID_2,PLoPP,Architectural,1
+MP_ID_20,PLoPP,Road Marking,1
+MP_ID_21,PLoPP,Architectural,1
+MP_ID_22,PLoPP,Road Marking,1
+MP_ID_23,PLoPP,General Industrial,1
+MP_ID_24,FLoPP,,0
+MP_ID_25,PLoPP,Marine,1
+MP_ID_26,PLoPP,Marine,1
+MP_ID_27,PLoPP,Architectural,1
+MP_ID_28,FLoPP,,0
+MP_ID_29,PLoPP,Architectural,1
+MP_ID_3,FLoPP,,0
+MP_ID_30,PLoPP,General Industrial,1
+MP_ID_31,PLoPP,General Industrial,1
+MP_ID_32,PLoPP,General Industrial,1
+MP_ID_33,FLoPP,,0
+MP_ID_34,PLoPP,Marine,1
+MP_ID_35,PLoPP,Marine,1
+MP_ID_36,PLoPP,Road Marking,1
+MP_ID_37,PLoPP,Marine,1
+MP_ID_38,PLoPP,Marine,1
+MP_ID_39,PLoPP,Marine,1
+MP_ID_4,PLoPP,Marine,1
+MP_ID_6,PLoPP,Road Marking,1
+MP_ID_7,PLoPP,Architectural,0
+MP_ID_8,FLoPP,,1
+MP_ID_9,PLoPP,General Industrial,0
+HA.T1.M2.S,PLoPP,Road Marking,0
+HA.T1.R1.N,PLoPP,Road Marking,1
+HA.T1.R2.S,PLoPP,Road Marking,1
+HA.T1.T1.N,PLoPP,Road Marking,1
+HA.T1.T1.S,PLoPP,Road Marking,1
+HA.T1.T2.N,PLoPP,Road Marking,1
+HA.T1.T2.S,PLoPP,Road Marking,0
+HA.T2.M1.S,PLoPP,Road Marking,1
+HA.T2.M2.S,PLoPP,Road Marking,1
+HA.T2.R1.N,PLoPP,Road Marking,1
+HA.T2.R2.S,PLoPP,Road Marking,1
+HA.T2.T2.S,PLoPP,Road Marking,1
+HA.T3.M1.N,PLoPP,Road Marking,1
+HA.T3.M2.N,PLoPP,Road Marking,1
+HA.T3.M2.S,PLoPP,Road Marking,0
+HA.T3.R1.S,PLoPP,Road Marking,1
+HA.T3.R2.S,PLoPP,Road Marking,1
+HA.T3.T1.S,PLoPP,Road Marking,1
+HA.T3.T2.S,PLoPP,Road Marking,0
+JS.T1.M1.S,PLoPP,Road Marking,1
+JS.T1.M2.N,FLoPP,,0
+JS.T1.R1.S,PLoPP,Road Marking,1
+JS.T1.R2.N,FLoPP,,1
+JS.T1.T2.N,FLoPP,,1
+JS.T2.R1.N,PLoPP,Road Marking,0
+JS.T2.T2.S,PLoPP,Road Marking,1
+JS.T3.M2.N,FLoPP,,1
+JS.T3.T2.N,PLoPP,Road Marking,1
+LD.T3.T3.N,FLoPP,,1
+LD.T3.T3.S,PLoPP,Road Marking,1
+LD.T3.T4.N,PLoPP,Road Marking,1
+LD.T3.T4.S,PLoPP,Road Marking,1
+LD.T4.T3.N,FLoPP,,1
+LD.T4.T4.N,FLoPP,,1
+LD.T4.T4.S,FLoPP,,0
+RR.T1.M1.N,PLoPP,Road Marking,1
+RR.T1.M2.N,PLoPP,Road Marking,0
+RR.T1.M2.S,PLoPP,Road Marking,0
+RR.T1.R2.S,PLoPP,Road Marking,0
+RR.T2.R1.S,FLoPP,,0
+RR.T2.R2.S,FLoPP,,0
+RR.T2.T1.S,FLoPP,,0
+RR.T2.T2.S,PLoPP,Road Marking,0
+RR.T3.M2.S,FLoPP,,0
+RR.T3.R1.S,PLoPP,Road Marking,0
+RR.T3.R2.S,FLoPP,,0
+RR.T4.M2.N,PLoPP,Road Marking,0

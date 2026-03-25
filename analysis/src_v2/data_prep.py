@@ -52,6 +52,10 @@ def _process_csv_directory(
     exclude: set[str] | None = None,
     uppercase_only: bool = False,
     lowercase_only: bool = False,
+    drop_duplicate_wavelengths: bool = True,
+    sort_files: bool = True,
+    convert_wavenumbers_to_int: bool = True,
+    sample_name_mode: str = "stem",
 ) -> pd.DataFrame:
     """
     Load all CSV files in *directory* and return a wide DataFrame.
@@ -77,6 +81,8 @@ def _process_csv_directory(
     exclude = {e.lower() for e in (exclude or set())}
 
     all_files = os.listdir(directory)
+    if sort_files:
+        all_files = sorted(all_files)
     if uppercase_only:
         csv_files = [f for f in all_files if f.endswith(".CSV") and f.lower() not in exclude]
     elif lowercase_only:
@@ -91,11 +97,18 @@ def _process_csv_directory(
     for filename in csv_files:
         file_path = directory / filename
         df = pd.read_csv(file_path, header=None, names=["Wavelength", "Datavalue"])
-        df = df.drop_duplicates(subset="Wavelength")
+        if drop_duplicate_wavelengths:
+            df = df.drop_duplicates(subset="Wavelength")
         df_transposed = df.set_index("Wavelength").T
-        # Convert wavenumber column names to integers — matches notebook Cell 5/7
-        df_transposed.columns = [int(col) for col in df_transposed.columns]
-        df_transposed["Sample"] = Path(filename).stem
+        if convert_wavenumbers_to_int:
+            # Convert wavenumber column names to integers — used by the
+            # reconstructed train/test pipeline. The notebook validation cells
+            # are looser here, so callers can disable this for strict parity.
+            df_transposed.columns = [int(col) for col in df_transposed.columns]
+        if sample_name_mode == "filename":
+            df_transposed["Sample"] = filename
+        else:
+            df_transposed["Sample"] = Path(filename).stem
         frames.append(df_transposed)
 
     master_df = pd.concat(frames, axis=0, ignore_index=True).fillna(0)
@@ -136,12 +149,11 @@ class SNVTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):  # noqa: N803
-        X = np.array(X, dtype=float)
+        # Match the notebook implementation exactly.
+        X = np.array(X)
         mean_centred = X - np.mean(X, axis=1, keepdims=True)
         if self.use_scaling:
-            std = np.std(mean_centred, axis=1, keepdims=True)
-            std = np.where(std == 0, 1.0, std)
-            return mean_centred / std
+            return mean_centred / np.std(mean_centred, axis=1, keepdims=True)
         return mean_centred
 
 
@@ -176,7 +188,8 @@ class DerivativeTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):  # noqa: N803
-        X = np.array(X, dtype=float)
+        # Match the notebook implementation exactly.
+        X = np.array(X)
         return np.apply_along_axis(
             savgol_filter,
             axis=1,
@@ -302,15 +315,22 @@ def load_andrew_turner_data() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     directory = config.ANDREW_TURNER_DIR
     key_path  = directory / "SampleKey_correct_sector.csv"
 
-    # Notebook Cell 28: loads only uppercase .CSV files, skips SampleKey.csv
+    # Notebook Cell 28: loads only uppercase .CSV files, skips SampleKey.csv.
+    # Use notebook-like file ordering and duplicate handling.
     spectra_df = _process_csv_directory(
         directory,
         exclude={"SampleKey.csv", key_path.name},
         uppercase_only=True,
+        drop_duplicate_wavelengths=False,
+        sort_files=False,
+        sample_name_mode="filename",
     )
 
     # utf-8-sig strips the BOM character from the first column name
     sample_key = pd.read_csv(key_path, encoding="utf-8-sig")
+
+    # Notebook Cell 28: strip uppercase .CSV after loading.
+    spectra_df["Sample"] = spectra_df["Sample"].str.replace(".CSV", "", regex=False)
 
     # Notebook Cell 29: merge on Mira's ID
     merged = pd.merge(
@@ -327,9 +347,9 @@ def load_andrew_turner_data() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     merged["observed"] = merged["observed"].map({"PLOPP": config.LABEL_PLOPP, "FLOPP": config.LABEL_FLOPP})
     merged.drop(columns=["Paint or non-paint"], errors="ignore", inplace=True)
 
-    # Drop excluded sample and rows without a label
+    # Drop the explicitly excluded sample. Notebook defers dropping NaN
+    # observed rows until after Andrew Turner + Citadel concatenation.
     merged = merged[merged["Sample"] != "MP_ID_5"].copy()
-    merged = merged.dropna(subset=["observed"])
 
     # Standardise sector labels (same as Citadel loader)
     merged["zoie_sector"] = merged["zoie_sector"].replace({
@@ -374,11 +394,18 @@ def load_citadel_data(
     directory = config.CITADEL_DATA_DIR
     key_path  = config.CITADEL_SAMPLE_KEY
 
-    # lowercase_only=True matches notebook behaviour: the notebook's
-    # .str.replace('.csv','') only strips lowercase extensions, so any
-    # uppercase .CSV files in this directory fail to join with the sample
-    # key and are effectively excluded.
-    spectra_df = _process_csv_directory(directory, lowercase_only=True)
+    # Match notebook cells 30-32:
+    # - load both .csv and .CSV spectra files
+    # - preserve os.listdir ordering
+    # - do not deduplicate wavelengths
+    # Rows whose uppercase .CSV names fail to join to the sample key remain
+    # until the final dropna(subset=['observed']) in load_validation_data().
+    spectra_df = _process_csv_directory(
+        directory,
+        drop_duplicate_wavelengths=False,
+        sort_files=False,
+        sample_name_mode="filename",
+    )
 
     # Notebook Cell 30: assign AT column names to Citadel to ensure alignment
     if at_feature_cols is not None:
@@ -391,6 +418,10 @@ def load_citadel_data(
                 "skipping column name assignment",
                 len(spectra_df.columns), len(cols_to_keep),
             )
+
+    # Notebook Cell 30: only lowercase .csv is stripped, so uppercase .CSV
+    # filenames remain unchanged and fail to join to the sample key.
+    spectra_df["Sample"] = spectra_df["Sample"].str.replace(".csv", "", regex=False)
 
     # Notebook Cell 32: load sample key and map labels
     sample_key = pd.read_excel(key_path, usecols=["Sample name", "Paint or non-paint", "Sector"])
@@ -407,7 +438,6 @@ def load_citadel_data(
     )
 
     merged = pd.merge(spectra_df, sample_key, on="Sample", how="left")
-    merged = merged.dropna(subset=["observed"])
 
     # Standardise sector labels (notebook Cell 33)
     merged["zoie_sector"] = merged["zoie_sector"].replace({
@@ -430,10 +460,6 @@ def load_plopp_with_sectors() -> pd.DataFrame:
     """
     Load raw PLOPP spectra joined with sector labels.
 
-    Matches notebook Cells 42-45: loads PLoPP-only training data and
-    merges with the sector mapping so each sample has a Sector column.
-    Samples without a known sector are dropped.
-
     Returns
     -------
     pd.DataFrame with integer wavenumber columns + Sample, Target, Group, Sector
@@ -445,6 +471,51 @@ def load_plopp_with_sectors() -> pd.DataFrame:
     logger.info(
         "PLoPP with sectors: %d samples across %d sectors",
         len(merged), merged["Sector"].nunique(),
+    )
+    return merged
+
+
+def load_all_with_sectors() -> pd.DataFrame:
+    """
+    Load the notebook's sector-training table exactly.
+
+    Matches the notebook cells that define `train_with_sectors`:
+    - Reads ../data/output/merged_df.csv
+    - Drops Group
+    - Filters to Target == 'PLoPP'
+    - Reads ../../data/merged_df_sector_color.csv and keeps the same 5 columns
+    - Left-joins train_df.Sample to add_sector_df.CSVName
+    - Renames 'Industrial Wood' to 'Wood'
+
+    Important: this intentionally preserves the notebook's `Unnamed: 0`
+    column from merged_df.csv because the sector-model cells do not drop it
+    before fitting. That column materially affects the resulting confusion
+    matrices, so reproducing the notebook means preserving it here.
+
+    Returns
+    -------
+    pd.DataFrame matching the notebook's train_with_sectors table
+    """
+    train_df = pd.read_csv(config.NOTEBOOK_MERGED_DF_PATH)
+    train_df = train_df.drop(columns=["Group"], errors="ignore")
+    train_df = train_df[train_df["Target"] == config.LABEL_PLOPP].copy()
+
+    add_sector_df = pd.read_csv(config.NOTEBOOK_SECTOR_COLOR_PATH)
+    add_sector_df = add_sector_df[["CSVName", "Sample", "Sample_Number", "Color", "Sector"]].copy()
+
+    merged = pd.merge(
+        train_df,
+        add_sector_df,
+        left_on="Sample",
+        right_on="CSVName",
+        how="left",
+    )
+    merged["Sector"] = merged["Sector"].replace({"Industrial Wood": "Wood"})
+
+    logger.info(
+        "PLOPP with sectors: %d total samples across %d sectors",
+        len(merged),
+        merged["Sector"].nunique(),
     )
     return merged
 
@@ -485,6 +556,13 @@ def load_validation_data() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     X_val = pd.concat([X_at, X_ct], axis=0, ignore_index=True)
     y_val = pd.concat([y_at, y_ct], ignore_index=True)
     meta  = pd.concat([meta_at, meta_ct], ignore_index=True)
+
+    # Matches notebook Cell 33 / Cell 45 behavior:
+    # total_merged = pd.concat([...]); total_merged = total_merged.dropna(subset=['observed'])
+    keep_mask = meta["observed"].notna().reset_index(drop=True)
+    X_val = X_val.loc[keep_mask].reset_index(drop=True)
+    y_val = y_val.loc[keep_mask].reset_index(drop=True)
+    meta = meta.loc[keep_mask].reset_index(drop=True)
 
     logger.info("Combined validation: %d samples", len(X_val))
     return X_val, y_val, meta

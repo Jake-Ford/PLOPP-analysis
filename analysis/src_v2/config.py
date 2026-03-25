@@ -24,6 +24,8 @@ ANDREW_TURNER_DIR = DATA_DIR / "andrew_turner"
 CITADEL_DATA_DIR  = DATA_DIR / "citadel"
 CITADEL_SAMPLE_KEY = CITADEL_DATA_DIR / "2024.11.27_Citadel_sampleKey_ZoieForJake.xlsx"
 SECTOR_MAP_PATH    = DATA_DIR / "sector_map.csv"
+NOTEBOOK_MERGED_DF_PATH = PROJECT_DIR / "data" / "output" / "merged_df.csv"
+NOTEBOOK_SECTOR_COLOR_PATH = PROJECT_DIR / "data" / "merged_df_sector_color.csv"
 
 # Output directories
 MODELS_DIR  = ANALYSIS_DIR / "models"
@@ -50,7 +52,7 @@ PCA_VARIANCE_RETAINED = 0.95     # retain 95 % of variance
 N_ESTIMATORS  = 100
 MAX_DEPTH     = None             # let trees grow fully (RF default)
 MAX_FEATURES  = "log2"           # features considered at each split
-CLASSIFICATION_THRESHOLD = 0.50  # P(PLoPP) >= 0.50 → predicted PLoPP
+CLASSIFICATION_THRESHOLD = 0.60  # P(PLoPP) >= 0.60 → predicted PLoPP (matches notebook)
 
 # Hyperparameter tuning (GridSearchCV, 5-fold CV)
 CV_FOLDS = 5
@@ -59,6 +61,44 @@ PARAM_GRID = {
     "classifier__n_estimators": [100, 200, 500],
     "classifier__max_depth":    [None, 3, 5, 10, 25],
     "classifier__max_features": ["sqrt", "log2"],
+}
+
+# Multi-model sweep (matches notebook cell 12)
+# Base param grid applied to every model; each model dict adds classifier-specific entries.
+ALL_MODELS_BASE_GRID = {
+    "snv__use_scaling":    [True, False],
+    "derivatives__deriv":  [0, 1, 2],
+}
+
+ALL_MODELS_PARAM_GRIDS = {
+    "Random Forest": {
+        **ALL_MODELS_BASE_GRID,
+        "classifier__n_estimators":      [100, 200, 300, 500],
+        "classifier__max_depth":         [3, 6, 9],
+        "classifier__min_samples_split": [2, 5, 10],
+        "classifier__min_samples_leaf":  [1, 2, 4],
+        # Notebook uses ['auto','sqrt','log2'] — 'auto' removed in sklearn>=1.4 (was alias
+        # for 'sqrt'); replaced with None (use all features) to keep 3 values → 1944 candidates
+        "classifier__max_features":      ["sqrt", "log2", None],
+    },
+    "Logistic Regression": {
+        **ALL_MODELS_BASE_GRID,
+        "classifier__penalty": ["l1", "l2", "elasticnet", None],
+        "classifier__C":       [0.01, 0.1, 1, 10, 100],
+        "classifier__solver":  ["newton-cg", "lbfgs", "liblinear", "sag", "saga"],
+    },
+    "SVM": {
+        **ALL_MODELS_BASE_GRID,
+        "classifier__C":      [0.1, 1, 10, 100],
+        "classifier__kernel": ["linear", "poly", "rbf", "sigmoid"],
+        "classifier__gamma":  ["scale", "auto"],
+    },
+    "XGBoost": {
+        **ALL_MODELS_BASE_GRID,
+        "classifier__n_estimators":  [100, 500],
+        "classifier__learning_rate": [0.01, 0.05, 0.1],
+        "classifier__max_depth":     [3, 6, 9],
+    },
 }
 
 # Class labels
@@ -76,12 +116,15 @@ SECTORS = [
     "Marine",
 ]
 
-# Sectors evaluated on external validation data (matches notebook Cell 57 —
-# only 5 of the 7 sectors are evaluated there)
+# Sectors evaluated on external validation data.
+# The notebook loops over all trained target_sectors; Automotive and Consumer
+# simply have zero positive examples in the external validation set.
 VALIDATION_SECTORS = [
+    "Automotive",
     "General Industrial",
     "Architectural",
     "Road Marking",
+    "Consumer",
     "Marine",
     "Wood",
 ]

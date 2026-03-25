@@ -21,6 +21,7 @@ Run
 """
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -59,6 +60,8 @@ def step_load_training_data():
     logger.info("STEP 1 – Loading training data")
     logger.info("=" * 60)
     X_train, y_train, X_test, y_test, test_samples = data_prep.load_training_data()
+    print("Test set shape:", X_test.shape)
+    print("Test label counts:\n", y_test.value_counts().to_string())
     logger.info(
         "Train class counts:\n%s",
         y_train.value_counts().to_string(),
@@ -70,15 +73,32 @@ def step_load_training_data():
     return X_train, y_train, X_test, y_test, test_samples
 
 
-def step_tune_pipeline(X_train, y_train):
+def step_tune_pipeline(X_train, y_train, skip_tuning: bool = False):
     logger = logging.getLogger("main")
     logger.info("=" * 60)
-    logger.info("STEP 2 – Hyperparameter tuning (%d-fold CV)", config.CV_FOLDS)
+
+    if skip_tuning:
+        path = config.MODELS_DIR / "best_params.json"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"--skip-tuning requested but no best_params.json found at {path}. "
+                "Run without --skip-tuning first to generate it."
+            )
+        with open(path) as f:
+            params = json.load(f)
+        logger.info("STEP 2 – Skipping tuning, loaded params from %s", path)
+        logger.info("Loaded params: %s", params)
+        return params
+
+    logger.info("STEP 2 – Hyperparameter tuning: multi-model sweep (%d-fold CV)", config.CV_FOLDS)
     logger.info("=" * 60)
-    best_params = model_run.tune_pipeline(X_train, y_train)
-    config.save_hyperparameters(tuned_params=best_params)
+    result = model_run.tune_all_models(X_train, y_train)
+    logger.info(
+        "Best model: %s  |  CV F1: %.3f",
+        result["best_model_name"], result["best_f1_score"],
+    )
     logger.info("Tuned hyperparameters saved.")
-    return best_params
+    return result["best_params"]
 
 
 def step_train_pipeline(X_train, y_train, best_params: dict):
@@ -86,10 +106,12 @@ def step_train_pipeline(X_train, y_train, best_params: dict):
     logger.info("=" * 60)
     logger.info("STEP 3 – Building and training pipeline with tuned params")
     logger.info("=" * 60)
+    # best_params from tune_all_models has 'classifier__' prefixes — strip them
+    stripped = {k.replace("classifier__", ""): v for k, v in best_params.items()}
     pipeline = model_run.build_pipeline(
-        n_estimators=best_params.get("n_estimators", config.N_ESTIMATORS),
-        max_depth=best_params.get("max_depth", config.MAX_DEPTH),
-        max_features=best_params.get("max_features", config.MAX_FEATURES),
+        n_estimators=stripped.get("n_estimators", config.N_ESTIMATORS),
+        max_depth=stripped.get("max_depth", config.MAX_DEPTH),
+        max_features=stripped.get("max_features", config.MAX_FEATURES),
     )
     pipeline = model_run.train_pipeline(pipeline, X_train, y_train)
     return pipeline
@@ -169,12 +191,11 @@ def step_evaluate_validation(pipeline, train_columns):
         logger.info("\n%s", sector_acc.to_string())
 
 
-def step_sector_models(X_train, y_train, X_test, y_test, test_samples, X_val, meta_val):
+def step_sector_models(X_val, meta_val):
     """
-    Train binary sector classifiers (notebook Cell 49) and evaluate on:
-      - sectors_train : sector model's own internal 30% hold-out
-      - sectors_test  : main pipeline's held-out PLoPP test samples
-      - sectors_validation : external validation data (Cell 57)
+    Train binary sector classifiers and evaluate on:
+      - sectors_train      : sector model's own internal 30% hold-out (Cell 46)
+      - sectors_validation : external validation data (Cell 57/58)
     """
     logger = logging.getLogger("main")
     logger.info("=" * 60)
@@ -182,60 +203,40 @@ def step_sector_models(X_train, y_train, X_test, y_test, test_samples, X_val, me
     logger.info("=" * 60)
 
     try:
-        plopp_with_sectors = data_prep.load_plopp_with_sectors()
+        all_with_sectors = data_prep.load_all_with_sectors()
     except Exception as exc:
         logger.warning("Sector model training skipped — could not load sector data: %s", exc)
         return
 
-    # Matches notebook: total_merged.zoie_sector.value_counts()
-    logger.info(
-        "Sector sample counts (PLoPP training data):\n%s",
-        plopp_with_sectors["Sector"].value_counts().to_string(),
-    )
-    counts = plopp_with_sectors["Sector"].value_counts()
-    print("\nSector sample counts (PLoPP training data):")
+    # Matches notebook Cell 43: train_with_sectors.Sector.value_counts()
+    counts = all_with_sectors["Sector"].value_counts()
+    logger.info("Sector sample counts:\n%s", counts.to_string())
+    print("\nSector sample counts (PLOPP training data):")
     print("-" * 35)
     for sector, n in counts.items():
         print(f"  {sector:<22} {n:>4}")
     print(f"  {'Total':<22} {counts.sum():>4}")
     print()
 
-    # Train one binary model per sector (Cell 49)
-    sector_models = model_run.train_sector_binary_models(plopp_with_sectors)
+    # Train one binary model per sector (Cell 46 — all 7 sectors)
+    sector_models = model_run.train_sector_binary_models(all_with_sectors)
 
-    # sectors_train — sector model's own internal hold-out
+    # Training hold-out: complex confusion matrix + accuracy bar chart (matches Cell 46)
     evaluation.print_sector_metrics_report(sector_models, label="Sector Models – Training Hold-out")
     evaluation.plot_binary_sector_confusion_matrices(
         sector_models,
-        output_dir=config.FIGURES_DIR / "sectors_train",
-        label_prefix="train_",
+        output_dir=config.FIGURES_DIR / "sectors_test",
+        label_prefix="test_",
+    )
+    evaluation.plot_sector_accuracy_bar(
+        sector_models,
+        title="Total Accuracy Across Sectors",
+        output_path=config.FIGURES_DIR / "sectors_test" / "accuracy_across_sectors.png",
     )
 
-    # sectors_test — main pipeline's PLoPP test set
-    try:
-        sector_map = data_prep.load_sector_map()
-        plopp_test_idx = (y_test == config.LABEL_PLOPP).values
-        X_test_plopp = X_test.iloc[plopp_test_idx].reset_index(drop=True)
-        test_meta = pd.DataFrame({"Sample": test_samples[plopp_test_idx].values})
-        test_meta = test_meta.merge(sector_map, on="Sample", how="left")
-        test_meta = test_meta.rename(columns={"Sector": "zoie_sector"})
-        sector_mask = test_meta["zoie_sector"].isin(config.SECTORS)
-        test_sector_results = model_run.evaluate_sector_models_on_validation(
-            sector_models,
-            X_test_plopp.loc[sector_mask].reset_index(drop=True),
-            test_meta.loc[sector_mask].reset_index(drop=True),
-        )
-        evaluation.print_sector_metrics_report(test_sector_results, label="Sector Models – Test Set")
-        evaluation.plot_binary_sector_confusion_matrices(
-            test_sector_results,
-            output_dir=config.FIGURES_DIR / "sectors_test",
-            label_prefix="test_",
-        )
-    except Exception as exc:
-        logger.warning("Sector confusion matrices (test) skipped: %s", exc)
-
-    # sectors_validation — external validation data (Cell 57)
-    # Notebook only evaluates 5 of the 7 sectors here
+    # sectors_validation — external validation data (Cell 57/58)
+    # The notebook evaluates all target sectors here; sectors without any
+    # positives in the validation set still appear as all-negative rows.
     val_results = model_run.evaluate_sector_models_on_validation(
         sector_models, X_val, meta_val,
         sectors=config.VALIDATION_SECTORS,
@@ -245,6 +246,11 @@ def step_sector_models(X_train, y_train, X_test, y_test, test_samples, X_val, me
         val_results,
         output_dir=config.FIGURES_DIR / "sectors_validation",
         label_prefix="validation_",
+    )
+    evaluation.plot_sector_accuracy_bar(
+        val_results,
+        title="Unseen Data Accuracy Comparison Across Sectors",
+        output_path=config.FIGURES_DIR / "sectors_validation" / "accuracy_across_sectors.png",
     )
 
 
@@ -270,7 +276,7 @@ def main(args: argparse.Namespace) -> None:
     logger.info("Output directories: figures=%s  models=%s", config.FIGURES_DIR, config.MODELS_DIR)
 
     X_train, y_train, X_test, y_test, test_samples = step_load_training_data()
-    best_params = step_tune_pipeline(X_train, y_train)
+    best_params = step_tune_pipeline(X_train, y_train, skip_tuning=args.skip_tuning)
     pipeline = step_train_pipeline(X_train, y_train, best_params)
     step_evaluate_test_set(pipeline, X_test, y_test, test_samples=test_samples)
     step_evaluate_validation(pipeline, X_train.columns)
@@ -281,12 +287,11 @@ def main(args: argparse.Namespace) -> None:
     # handles alignment to each model's own feature_names_in_.
     try:
         X_val, y_val, meta_val = data_prep.load_validation_data()
-        sector_mask = meta_val["zoie_sector"].isin(config.SECTORS)
+        # Pass all validation samples — NaN-sector samples become class 0
+        # ("not this sector") in each binary model, matching the notebook.
         step_sector_models(
-            X_train, y_train,
-            X_test=X_test, y_test=y_test, test_samples=test_samples,
-            X_val=X_val.loc[sector_mask].reset_index(drop=True),
-            meta_val=meta_val.loc[sector_mask].reset_index(drop=True),
+            X_val=X_val.reset_index(drop=True),
+            meta_val=meta_val.reset_index(drop=True),
         )
     except Exception as exc:
         logging.getLogger("main").warning("Sector step skipped: %s", exc)
@@ -305,5 +310,10 @@ if __name__ == "__main__":
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging verbosity (default: INFO)",
+    )
+    parser.add_argument(
+        "--skip-tuning",
+        action="store_true",
+        help="Skip GridSearchCV and load best params from models/hyperparameters.json",
     )
     main(parser.parse_args())

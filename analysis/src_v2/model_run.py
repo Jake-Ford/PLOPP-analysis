@@ -34,8 +34,11 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
 
 import config
 from data_prep import SNVTransformer, DerivativeTransformer
@@ -109,7 +112,6 @@ def build_pipeline(
                     max_depth=max_depth,
                     max_features=max_features,
                     random_state=random_state,
-                    n_jobs=-1,
                 ),
             ),
         ]
@@ -213,6 +215,90 @@ def tune_pipeline(
     return best_params
 
 
+def tune_all_models(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_param_grids: dict = None,
+    cv: int = config.CV_FOLDS,
+    scoring: str = config.CV_SCORING,
+    random_state: int = config.RANDOM_STATE,
+) -> dict:
+    """
+    GridSearch over multiple classifiers and return the best params overall.
+
+    Matches notebook cell 12: tests Random Forest, Logistic Regression, SVM,
+    and XGBoost, each with their own param grid, and selects the winner by
+    best CV F1 score.  Results are saved to models/best_params.json.
+
+    Parameters
+    ----------
+    X_train          : training feature matrix
+    y_train          : training labels (original string labels e.g. 'PLoPP'/'FLoPP')
+    model_param_grids: dict of {model_name: param_grid}; defaults to
+                       config.ALL_MODELS_PARAM_GRIDS
+    cv               : number of CV folds
+    scoring          : sklearn scoring string (notebook uses 'f1')
+    random_state     : random seed
+
+    Returns
+    -------
+    dict with keys:
+        "best_model_name"  : str   – winning model name
+        "best_f1_score"    : float – best CV F1
+        "best_params"      : dict  – raw best_params_ from GridSearchCV
+    """
+    if model_param_grids is None:
+        model_param_grids = config.ALL_MODELS_PARAM_GRIDS
+
+    _model_instances = {
+        "Random Forest":     RandomForestClassifier(random_state=random_state),
+        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=random_state),
+        "SVM":               SVC(probability=True, random_state=random_state),
+        "XGBoost":           XGBClassifier(random_state=random_state, verbosity=0),
+    }
+
+    best_model_name = None
+    best_f1_score = 0.0
+    best_params: dict = {}
+
+    for name, param_grid in model_param_grids.items():
+        model = _model_instances.get(name)
+        if model is None:
+            logger.warning("No model instance defined for '%s' — skipping.", name)
+            continue
+
+        pipeline = Pipeline([
+            ("snv",         SNVTransformer()),
+            ("derivatives", DerivativeTransformer()),
+            ("classifier",  model),
+        ])
+
+        logger.info("GridSearchCV for %s …", name)
+        grid_search = GridSearchCV(pipeline, param_grid, cv=cv, scoring=scoring, verbose=1)
+        grid_search.fit(X_train, y_train)
+
+        logger.info("Best params for %s: %s", name, grid_search.best_params_)
+        logger.info("Best CV F1 for %s: %.3f", name, grid_search.best_score_)
+
+        if grid_search.best_score_ > best_f1_score:
+            best_f1_score = grid_search.best_score_
+            best_model_name = name
+            best_params = grid_search.best_params_
+
+    logger.info(
+        "Winner: %s with CV F1 = %.3f  params = %s",
+        best_model_name, best_f1_score, best_params,
+    )
+
+    config.save_hyperparameters({"best_model": best_model_name, **best_params})
+
+    return {
+        "best_model_name": best_model_name,
+        "best_f1_score":   best_f1_score,
+        "best_params":     best_params,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
@@ -259,25 +345,33 @@ def predict(
 # ---------------------------------------------------------------------------
 
 def train_sector_binary_models(
-    plopp_with_sectors: pd.DataFrame,
+    all_with_sectors: pd.DataFrame,
     sectors: list | None = None,
     test_size: float = 0.3,
     random_state: int = config.RANDOM_STATE,
 ) -> dict:
     """
-    Train one binary classifier per sector on PLoPP-only data.
+    Train one binary classifier per sector.
 
-    Matches notebook Cell 49: for each sector, labels samples as
-    1 (= that sector) or 0 (= other sectors), then trains the same
-    SNV → Derivative → PCA → RandomForest pipeline and evaluates on
-    a held-out test portion.
+    Matches notebook Cell 46 exactly:
+    - Input is ALL data (PLOPP + FLOPP) merged with sector map, as returned by
+      data_prep.load_all_with_sectors().  FLOPP rows have NaN for Sector and
+      become class 0 ("not this sector"), exactly as the notebook does.
+    - Binary labels: 1 = target sector, 0 = everything else (including FLOPP
+      and PLOPP from other sectors).
+    - Drops the same columns as the corrected notebook sector path:
+        ['Unnamed: 0', 'Sector', 'Target', 'Sample', 'Sample_x', 'Sample_y',
+         'Sample_Number', 'Color', 'CSVName', 'SectorBinary']  (errors='ignore')
+    - Pipeline: SNVTransformer(use_scaling=True) → DerivativeTransformer(deriv=1)
+                → PCA(n_components=0.95) → RandomForestClassifier(random_state=42)
+    - Split: test_size=0.3, random_state=42
 
     Parameters
     ----------
-    plopp_with_sectors : DataFrame from data_prep.load_plopp_with_sectors()
-    sectors            : list of sector names to model; defaults to config.SECTORS
-    test_size          : fraction held out per sector (notebook uses 0.3)
-    random_state       : random seed
+    all_with_sectors : DataFrame from data_prep.load_all_with_sectors()
+    sectors          : list of sector names to model; defaults to config.SECTORS
+    test_size        : fraction held out (notebook uses 0.3)
+    random_state     : random seed (notebook uses 42)
 
     Returns
     -------
@@ -286,22 +380,33 @@ def train_sector_binary_models(
     if sectors is None:
         sectors = config.SECTORS
 
-    meta_cols = {"Target", "Sample", "Group", "Sector"}
-    feature_cols = [c for c in plopp_with_sectors.columns if c not in meta_cols]
+    # Matches notebook Cell 46 drop list (errors='ignore' handles absent columns)
+    _drop_cols = [
+        "Unnamed: 0", "Sector", "Target", "Sample", "Sample_x", "Sample_y",
+        "Sample_Number", "Color", "CSVName", "SectorBinary",
+    ]
 
     results = {}
     for sector in sectors:
-        data = plopp_with_sectors.copy()
+        data = all_with_sectors.copy()
+        # NaN Sector rows (FLOPP + unmatched PLOPP) evaluate False → SectorBinary=0
         data["SectorBinary"] = (data["Sector"] == sector).astype(int)
 
-        X = data[feature_cols]
+        X = data.drop(columns=_drop_cols, errors="ignore")
+        X.columns = X.columns.astype(str)
         y = data["SectorBinary"]
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state
         )
 
-        pipe = build_pipeline()
+        # Explicit pipeline params matching notebook Cell 46
+        pipe = Pipeline([
+            ("snv",        SNVTransformer(use_scaling=True)),
+            ("derivative", DerivativeTransformer(deriv=1)),
+            ("pca",        PCA(n_components=config.PCA_VARIANCE_RETAINED)),
+            ("classifier", RandomForestClassifier(random_state=random_state)),
+        ])
         pipe.fit(X_train, y_train)
         y_pred = pipe.predict(X_test)
 
@@ -311,10 +416,11 @@ def train_sector_binary_models(
             sector, len(X_train), len(X_test), n_components,
         )
         results[sector] = {
-            "pipeline":  pipe,
-            "y_test":    y_test.reset_index(drop=True),
-            "y_pred":    pd.Series(y_pred, name="predicted"),
-            "X_test":    X_test.reset_index(drop=True),
+            "pipeline": pipe,
+            "y_test":   y_test.reset_index(drop=True),
+            "y_pred":   pd.Series(y_pred, name="predicted"),
+            "X_test":   X_test.reset_index(drop=True),
+            "train_columns": list(X_train.columns),
         }
 
     return results
@@ -341,8 +447,8 @@ def evaluate_sector_models_on_validation(
     meta          : validation metadata with sector_col column
     sector_col    : column name holding sector labels in meta
     sectors       : list of sector names to evaluate; defaults to all keys in
-                    sector_models.  Pass config.VALIDATION_SECTORS to match
-                    the notebook Cell 57 behaviour (5 of 7 sectors).
+                    sector_models. Pass config.VALIDATION_SECTORS to mirror
+                    the notebook's explicit target_sectors loop.
 
     Returns
     -------
@@ -360,9 +466,17 @@ def evaluate_sector_models_on_validation(
         model_data = sector_models[sector]
         pipe = model_data["pipeline"]
 
-        # Align X_val columns to what this pipeline was trained on
-        if hasattr(pipe, "feature_names_in_"):
-            X_for_pred = X_val.reindex(columns=pipe.feature_names_in_, fill_value=0)
+        train_columns = model_data.get("train_columns")
+        if train_columns is None and hasattr(pipe, "feature_names_in_"):
+            train_columns = list(pipe.feature_names_in_)
+
+        # Align X_val columns to what this pipeline was trained on.
+        # This is required for notebook parity because the sector models can
+        # include columns such as `Unnamed: 0` from merged_df.csv.
+        if train_columns is not None:
+            X_for_pred = X_val.copy()
+            X_for_pred.columns = X_for_pred.columns.astype(str)
+            X_for_pred = X_for_pred.reindex(columns=train_columns, fill_value=0)
         else:
             X_for_pred = X_val
 
