@@ -2,9 +2,7 @@
 
 ## Overview
 
-This repository accompanies the forthcoming paper **A Paint Library Of Plastic Particles (PLOPP): Fourier transform infrared spectral analysis of paint microplastics**, Zoie T. Diana, Madeleine Milne, Jacob Ford, Ron Rubinovitz, Andrew Turner, Chelsea M. Rochman.
-
-This project aims to address the challenge of characterizing paint microplastics in the environment and differentiating them from non-paint microplastics. We have created a comprehensive Fourier transform infrared spectroscopy (FTIR) library named the Paint Library of Plastic Products (PLOPP), which includes 263 spectra from 90 different paints used in various sectors.
+This project aims to address the challenge of characterizing paint microplastics in the environment and differentiating them from non-paint microplastics. We have created a comprehensive Fourier transform infrared spectroscopy (FTIR) library named the Paint Library of Plastic Particles (PLoPP), which includes 263 spectra from 90 different paints used in various sectors.
 
 To enhance the identification of paint microplastics, we utilized machine learning (ML) techniques to classify spectral data as either paint or non-paint microplastics. This document provides an overview of the ML component implemented in this project.
 
@@ -16,7 +14,7 @@ The primary objective of the ML component is to train a model that can accuratel
 
 ### Data
 
-Training Data: The PLOPP library consisting of 263 spectra from 90 paints.Test Data: Environmental microplastic samples collected from the River Thames, United Kingdom.
+Training Data: The PLoPP library consisting of 263 spectra from 90 paints.Test Data: Environmental microplastic samples collected from the River Thames, United Kingdom.
 
 ## Methodology
 
@@ -35,7 +33,7 @@ Training Data: The PLOPP library consisting of 263 spectra from 90 paints.Test D
 
 ## Results
 
-The trained model successfully classifies the spectra, enabling the differentiation between paint and non-paint microplastics in environmental samples. This classification supports the utility of the PLOPP library in environmental microplastic research.
+The trained model successfully classifies the spectra, enabling the differentiation between paint and non-paint microplastics in environmental samples. This classification supports the utility of the PLoPP library in environmental microplastic research.
 
 ## Reproducible Setup (Windows and macOS)
 
@@ -87,3 +85,9 @@ The script will install Python 3.13.7 (via uv), create a virtual environment at 
 2. Open `analysis/src/spectra_analysis.ipynb`.
 3. Click **Select Kernel** (top-right) → **Jupyter Kernel...** → **PLOPP Notebook (.venv)**.
 4. Click **Run All** or use `Shift+Enter` to run cells individually.
+
+## How to Cite
+
+Please cite this analysis using the following citation:
+
+> Diana, Z. T., Milne, M., Ford, J., Rubinovitz, R., Turner, A., & Rochman, C. M. (under review). Title: A Paint Library of Plastic Particles (PLoPP): A spectral library, visual key, and machine learning model for paint microplastic identification. *Microplastics and Nanoplastics*.
